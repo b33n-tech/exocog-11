@@ -26,18 +26,21 @@ let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
 let llmData = null;
 
 // --- Utils ---
-function formatDate(iso){const d=new Date(iso);return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+function formatDate(iso){
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
 
 // --- Render Tasks ---
 function renderTasks(){
-  tasksContainer.innerHTML="";
+  tasksContainer.innerHTML = "";
   tasks.slice().sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach((task,i)=>{
     const li=document.createElement("li");
     li.className="task-item";
 
     const taskText=document.createElement("div");
     taskText.className="task-text";
-    taskText.textContent=task.text + " (ajoutée le "+task.date.split("T")[0]+")";
+    taskText.textContent = task.text + " (ajoutée le "+task.date.split("T")[0]+")";
 
     const commentBlock=document.createElement("div");
     commentBlock.className="comment-section";
@@ -158,6 +161,54 @@ prompts.forEach(p=>{
   promptsContainer.appendChild(btn);
 });
 
+// --- Fonction pour construire le prompt ---
+function buildPrompt(inputText) {
+  return `
+Tu es un assistant de gestion de projet. Je vais te donner un texte contenant des tâches, des notes et des informations diverses, souvent incomplètes, peu structurées ou dispersées. Ta mission est de :
+
+1. Identifier toutes les tâches explicites et implicites.
+2. Extraire les micro-actions et micro-micro-actions nécessaires pour chaque tâche.
+3. Identifier les dépendances entre tâches et actions.
+4. Extraire les messages à envoyer, les livrables, les réunions et autres modules pertinents.
+5. Préserver les commentaires ou notes associées aux tâches.
+6. Générer un JSON structuré strictement sous ce format :
+
+{
+  "jalons": [{"titre":"","datePrévue":"","sousActions":[{"texte":"","statut":""}]}],
+  "messages": [{"destinataire":"","sujet":"","texte":"","envoyé":false}],
+  "rdv": [{"titre":"","date":"","durée":"","participants":[""]}],
+  "autresModules": [{"titre":"","items":[{"nom":"","lien":""}]}],
+  "livrables": [{"titre":"","type":"","template":{}}]
+}
+
+- Tout ce qui n’est pas explicitement précisé mais logiquement nécessaire doit être inféré.
+- Les actions non datées peuvent recevoir une date par défaut aujourd’hui.
+- La structure JSON doit être strictement respectée et parsable.
+
+Voici le texte à traiter :
+${inputText}
+  `;
+}
+
+// --- Bouton envoyer au LLM ---
+const sendToLLMBtn = document.createElement("button");
+sendToLLMBtn.textContent = "📤 Envoyer au LLM";
+sendToLLMBtn.style.marginTop = "0.5rem";
+document.querySelector(".prompts-section").appendChild(sendToLLMBtn);
+
+sendToLLMBtn.addEventListener("click", () => {
+  const inputText = jsonPaste.value.trim();
+  if (!inputText) {
+    alert("Colle d'abord le texte des tâches ou JSON");
+    return;
+  }
+  const prompt = buildPrompt(inputText);
+  navigator.clipboard.writeText(prompt).then(() => {
+    window.open(llmSelect.value, "_blank");
+    alert("✅ Prompt copié dans le presse-papier et LLM ouvert !");
+  });
+});
+
 // --- Push JSON vers modules ---
 pushJsonBtn.addEventListener("click",()=>{
   try{
@@ -194,7 +245,7 @@ function populateModules(){
   // Livrables
   livrablesList.innerHTML="";
   if(llmData.livrables?.length){
-    llmData.livrables.forEach((l,i)=>{
+    llrData.livrables?.forEach((l,i)=>{
       const li=document.createElement("li");
       li.innerHTML=`<input type="checkbox"> ${l.titre} (${l.type}) <input type="text" placeholder="Note…">`;
       livrablesList.appendChild(li);
@@ -205,10 +256,10 @@ function populateModules(){
 // --- Generate LLM from modules ---
 generateMailBtn.addEventListener("click",()=>{
   const selected=[];
-  messagesTableBody.querySelectorAll("tr").forEach(tr=>{
+  messagesTableBody.querySelectorAll("tr").forEach((tr,i)=>{
     const checkbox=tr.querySelector("input[type='checkbox']");
     const note=tr.querySelector("input[type='text']").value;
-    if(checkbox.checked) selected.push({...llmData.messages[Array.from(messagesTableBody.rows).indexOf(tr)],note});
+    if(checkbox.checked) selected.push({...llmData.messages[i],note});
   });
   if(selected.length){
     const text=JSON.stringify(selected,null,2);
