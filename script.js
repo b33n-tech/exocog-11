@@ -7,10 +7,10 @@ const copiedMsg = document.getElementById("copiedMsg");
 const clearBtn = document.getElementById("clearBtn");
 const restoreBtn = document.getElementById("restoreBtn");
 const restoreInput = document.getElementById("restoreInput");
-const promptsContainer = document.getElementById("promptsContainer");
-const llmSelect = document.getElementById("llmSelect");
 const jsonPaste = document.getElementById("jsonPaste");
 const pushJsonBtn = document.getElementById("pushJsonBtn");
+const sendToLLMBtn = document.getElementById("sendToLLMBtn");
+const llmSelect = document.getElementById("llmSelect");
 
 // --- Modules ---
 const jalonsList = document.getElementById("jalonsList");
@@ -26,13 +26,13 @@ let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
 let llmData = null;
 
 // --- Utils ---
-function formatDate(iso){
+function formatDate(iso) {
   const d = new Date(iso);
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
 // --- Render Tasks ---
-function renderTasks(){
+function renderTasks() {
   tasksContainer.innerHTML = "";
   tasks.slice().sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach((task,i)=>{
     const li=document.createElement("li");
@@ -40,7 +40,7 @@ function renderTasks(){
 
     const taskText=document.createElement("div");
     taskText.className="task-text";
-    taskText.textContent = task.text + " (ajoutée le "+task.date.split("T")[0]+")";
+    taskText.textContent=task.text + " (ajoutée le "+task.date.split("T")[0]+")";
 
     const commentBlock=document.createElement("div");
     commentBlock.className="comment-section";
@@ -136,79 +136,6 @@ restoreInput.addEventListener("change",event=>{
   });
 });
 
-// --- Prompts ---
-const prompts=[
-  {id:"planifier",label:"Plan",text:"Transforme ces tâches en plan structuré étape par étape :"},
-  {id:"prioriser",label:"Priorité",text:"Classe ces tâches par ordre de priorité et urgence :"},
-  {id:"categoriser",label:"Catégories",text:"Range ces tâches dans des catégories logiques :"}
-];
-
-prompts.forEach(p=>{
-  const btn=document.createElement("button");
-  btn.textContent=p.label;
-  btn.addEventListener("click",()=>{
-    const combined=p.text+"\n\n"+tasks.map(t=>{
-      let str="- "+t.text;
-      if(t.comments?.length) str+="\n  Commentaires :\n"+t.comments.map(c=>`    - [${formatDate(c.date)}] ${c.text}`).join("\n");
-      return str;
-    }).join("\n");
-    navigator.clipboard.writeText(combined).then(()=>{
-      copiedMsg.style.display="block";
-      setTimeout(()=>copiedMsg.style.display="none",2000);
-      window.open(llmSelect.value,"_blank");
-    });
-  });
-  promptsContainer.appendChild(btn);
-});
-
-// --- Fonction pour construire le prompt ---
-function buildPrompt(inputText) {
-  return `
-Tu es un assistant de gestion de projet. Je vais te donner un texte contenant des tâches, des notes et des informations diverses, souvent incomplètes, peu structurées ou dispersées. Ta mission est de :
-
-1. Identifier toutes les tâches explicites et implicites.
-2. Extraire les micro-actions et micro-micro-actions nécessaires pour chaque tâche.
-3. Identifier les dépendances entre tâches et actions.
-4. Extraire les messages à envoyer, les livrables, les réunions et autres modules pertinents.
-5. Préserver les commentaires ou notes associées aux tâches.
-6. Générer un JSON structuré strictement sous ce format :
-
-{
-  "jalons": [{"titre":"","datePrévue":"","sousActions":[{"texte":"","statut":""}]}],
-  "messages": [{"destinataire":"","sujet":"","texte":"","envoyé":false}],
-  "rdv": [{"titre":"","date":"","durée":"","participants":[""]}],
-  "autresModules": [{"titre":"","items":[{"nom":"","lien":""}]}],
-  "livrables": [{"titre":"","type":"","template":{}}]
-}
-
-- Tout ce qui n’est pas explicitement précisé mais logiquement nécessaire doit être inféré.
-- Les actions non datées peuvent recevoir une date par défaut aujourd’hui.
-- La structure JSON doit être strictement respectée et parsable.
-
-Voici le texte à traiter :
-${inputText}
-  `;
-}
-
-// --- Bouton envoyer au LLM ---
-const sendToLLMBtn = document.createElement("button");
-sendToLLMBtn.textContent = "📤 Envoyer au LLM";
-sendToLLMBtn.style.marginTop = "0.5rem";
-document.querySelector(".prompts-section").appendChild(sendToLLMBtn);
-
-sendToLLMBtn.addEventListener("click", () => {
-  const inputText = jsonPaste.value.trim();
-  if (!inputText) {
-    alert("Colle d'abord le texte des tâches ou JSON");
-    return;
-  }
-  const prompt = buildPrompt(inputText);
-  navigator.clipboard.writeText(prompt).then(() => {
-    window.open(llmSelect.value, "_blank");
-    alert("✅ Prompt copié dans le presse-papier et LLM ouvert !");
-  });
-});
-
 // --- Push JSON vers modules ---
 pushJsonBtn.addEventListener("click",()=>{
   try{
@@ -245,7 +172,8 @@ function populateModules(){
   // Livrables
   livrablesList.innerHTML="";
   if(llmData.livrables?.length){
-    llrData.livrables?.forEach((l,i)=>{
+    llrablesList = livrablesList; // correction typo
+    llmData.livrables.forEach((l,i)=>{
       const li=document.createElement("li");
       li.innerHTML=`<input type="checkbox"> ${l.titre} (${l.type}) <input type="text" placeholder="Note…">`;
       livrablesList.appendChild(li);
@@ -253,13 +181,50 @@ function populateModules(){
   }
 }
 
+// --- Build Prompt ---
+function buildPrompt(inputText) {
+  return `
+Tu es un assistant de gestion de projet. Je vais te donner un texte contenant des tâches, des notes et des informations diverses, souvent incomplètes, peu structurées ou dispersées. Ta mission est de :
+
+1. Identifier toutes les tâches explicites et implicites.
+2. Extraire les micro-actions et micro-micro-actions nécessaires pour chaque tâche.
+3. Identifier les dépendances entre tâches et actions.
+4. Extraire les messages à envoyer, les livrables, les réunions et autres modules pertinents.
+5. Préserver les commentaires ou notes associées aux tâches.
+6. Générer un JSON structuré strictement sous ce format :
+
+{
+  "jalons": [{"titre":"","datePrévue":"","sousActions":[{"texte":"","statut":""}]}],
+  "messages": [{"destinataire":"","sujet":"","texte":"","envoyé":false}],
+  "rdv": [{"titre":"","date":"","durée":"","participants":[""]}],
+  "autresModules": [{"titre":"","items":[{"nom":"","lien":""}]}],
+  "livrables": [{"titre":"","type":"","template":{}}]
+}
+
+Voici le texte à traiter :
+${inputText}
+  `;
+}
+
+// --- Send to LLM ---
+sendToLLMBtn.addEventListener("click",()=>{
+  const inputText = jsonPaste.value.trim();
+  if(!inputText){alert("Colle d'abord le texte des tâches ou JSON"); return;}
+  const prompt = buildPrompt(inputText);
+  navigator.clipboard.writeText(prompt).then(()=>{
+    copiedMsg.style.display="block";
+    setTimeout(()=>copiedMsg.style.display="none",2000);
+    window.open(llmSelect.value,"_blank");
+  });
+});
+
 // --- Generate LLM from modules ---
 generateMailBtn.addEventListener("click",()=>{
   const selected=[];
-  messagesTableBody.querySelectorAll("tr").forEach((tr,i)=>{
+  messagesTableBody.querySelectorAll("tr").forEach(tr=>{
     const checkbox=tr.querySelector("input[type='checkbox']");
     const note=tr.querySelector("input[type='text']").value;
-    if(checkbox.checked) selected.push({...llmData.messages[i],note});
+    if(checkbox.checked) selected.push({...llmData.messages[Array.from(messagesTableBody.rows).indexOf(tr)],note});
   });
   if(selected.length){
     const text=JSON.stringify(selected,null,2);
@@ -282,3 +247,4 @@ generateLivrableBtn.addEventListener("click",()=>{
 
 // --- Initial render ---
 renderTasks();
+
